@@ -1119,7 +1119,11 @@
               </div>
               <span class="badge expiring">${days < 0 ? '已逾期' : `剩 ${days} 天`}</span>
             </div>
-            <div class="meta">到期日：${formatDate(t.contractEnd)}<br>電話：${escapeHtml(t.phone)}</div>
+            <div class="meta">
+  到期日：${formatDate(t.contractEnd)}<br>
+  電話：${escapeHtml(t.phone)}
+  ${t.note ? `<br>備註：${escapeHtml(t.note)}` : ''}
+</div>
           </div>
         `;
       }).join('');
