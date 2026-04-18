@@ -611,6 +611,94 @@
       color: #fecaca;
     }
 
+    .report-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-top: 16px;
+    }
+
+    .mini-card {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 14px;
+      background: #fff;
+    }
+
+    .mini-card h3 {
+      margin: 0 0 12px;
+      font-size: 16px;
+    }
+
+    .report-bars {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .bar-row {
+      display: grid;
+      grid-template-columns: 72px 1fr auto;
+      gap: 10px;
+      align-items: center;
+      font-size: 13px;
+    }
+
+    .bar-track {
+      width: 100%;
+      height: 10px;
+      border-radius: 999px;
+      background: #e5e7eb;
+      overflow: hidden;
+    }
+
+    .bar-fill {
+      height: 100%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #60a5fa, #2563eb);
+    }
+
+    .bar-fill.atm {
+      background: linear-gradient(90deg, #34d399, #10b981);
+    }
+
+    .bar-fill.cash {
+      background: linear-gradient(90deg, #fbbf24, #f59e0b);
+    }
+
+    .ranking-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .ranking-item {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: #f8fafc;
+      border: 1px solid #e5e7eb;
+    }
+
+    .ranking-item .name {
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .ranking-item .sub {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .empty-hint {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.7;
+      padding: 10px 0;
+    }
+
     @media (max-width: 1100px) {
 
       .layout,
@@ -633,6 +721,7 @@
       }
     }
   </style>
+  <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
 </head>
 
 <body>
@@ -741,7 +830,7 @@
         <div class="split">
           <div class="card">
             <h2>收費紀錄</h2>
-            <div class="muted">你可以手動登記每一筆月租收款。家人自用若不收費，也可以不建立紀錄。下面也能一鍵匯出月報表與年報表 CSV，讓會計對帳省很多力氣。</div>
+            <div class="muted">你可以手動登記每一筆月租收款。家人自用若不收費，也可以不建立紀錄。下面可一鍵匯出月報表 Excel 與年報表 Excel，讓會計對帳省很多力氣。</div>
             <div class="filter-row" style="margin: 14px 0 10px;">
               <label>月報表月份
                 <input type="month" id="reportMonth" />
@@ -749,12 +838,18 @@
               <label>年報表年份
                 <select id="reportYear"></select>
               </label>
+              <label>財務分析起始月份
+                <input type="month" id="analysisStartMonth" />
+              </label>
+              <label>財務分析結束月份
+                <input type="month" id="analysisEndMonth" />
+              </label>
             </div>
             <div class="inline-actions" style="margin-bottom: 12px;">
-              <button class="btn-light" id="exportMonthCsvBtn">匯出月報表 CSV</button>
-              <button class="btn-light" id="exportYearCsvBtn">匯出年報表 CSV</button>
+              <button class="btn-light" id="exportMonthExcelBtn">匯出月報表 Excel</button>
+              <button class="btn-light" id="exportYearExcelBtn">匯出年報表 Excel</button>
             </div>
-            <div class="footer-note" style="margin-top: 0;">CSV 會用 Excel 比較友善的格式輸出，包含報表摘要和收費明細，拿去對帳會比較順。</div>
+            <div class="footer-note" style="margin-top: 0;">Excel 會包含報表摘要和收費明細，拿去對帳會比較順。</div>
             <div class="table-wrap">
               <table>
                 <thead>
@@ -777,6 +872,24 @@
             <h2>收費摘要</h2>
             <div class="stats" id="paymentStats"></div>
             <div id="reportStats"></div>
+            <div class="report-grid">
+              <div class="mini-card">
+                <h3>期間內每月收入</h3>
+                <div id="monthlyBreakdown"></div>
+              </div>
+              <div class="mini-card">
+                <h3>期間內租戶排行</h3>
+                <div id="tenantRanking"></div>
+              </div>
+              <div class="mini-card">
+                <h3>收款方式分析</h3>
+                <div id="paymentMethodBreakdown"></div>
+              </div>
+              <div class="mini-card">
+                <h3>快速判讀</h3>
+                <div id="financeInsights"></div>
+              </div>
+            </div>
             <div class="footer-note">這版會優先把資料同步到雲端。你也可以照樣匯出 JSON，當成額外保險箱。</div>
           </div>
         </div>
@@ -884,9 +997,6 @@
             <label>租戶 / 車位 *
               <select id="paymentTenant" required></select>
             </label>
-            <label>收費月份 *
-              <input type="month" id="paymentMonth" required />
-            </label>
             <label>金額 *
               <input type="number" id="paymentAmount" min="0" step="100" required />
             </label>
@@ -896,9 +1006,7 @@
             <label>收款方式
               <select id="paymentMethod">
                 <option value="現金">現金</option>
-                <option value="轉帳">轉帳</option>
-                <option value="匯款">匯款</option>
-                <option value="其他">其他</option>
+                <option value="ATM">ATM</option>
               </select>
             </label>
           </div>
@@ -1002,7 +1110,7 @@
           paymentMonth: '2026-04',
           amount: 3500,
           paymentDate: todayStr,
-          paymentMethod: '匯款',
+          paymentMethod: 'ATM',
           note: '示範資料',
         },
       ];
@@ -1014,6 +1122,25 @@
       const m = String(d.getMonth() + 1).padStart(2, '0');
       const day = String(d.getDate()).padStart(2, '0');
       return `${y}-${m}-${day}`;
+    }
+
+    function addMonthsToDate(dateStr, months) {
+      if (!dateStr) return '';
+      const date = new Date(`${dateStr}T00:00:00`);
+      if (Number.isNaN(date.getTime())) return dateStr;
+      const originalDay = date.getDate();
+      date.setMonth(date.getMonth() + months);
+      if (date.getDate() !== originalDay) {
+        date.setDate(0);
+      }
+      return toDateInputValue(date);
+    }
+
+    function getContractMonthsByAmount(amount) {
+      const numericAmount = Number(amount || 0);
+      if (numericAmount === 15000) return 6;
+      if (numericAmount === 30000) return 12;
+      return 0;
     }
 
     function formatDate(dateStr) {
@@ -1055,9 +1182,10 @@
       renderAlerts();
       renderTenantList();
       renderPaymentTable();
-      renderPaymentStats();
       syncReportControls();
+      renderPaymentStats();
       renderReportSummary();
+      renderFinancialAnalysis();
       syncSettingsUI();
       fillSpotOptions();
       fillPaymentTenantOptions();
@@ -1199,7 +1327,7 @@
         const tenant = state.tenants.find(t => t.id === p.tenantId);
         return `
           <tr>
-            <td>${escapeHtml(p.paymentMonth)}</td>
+            <td>${escapeHtml(p.paymentMonth || '')}</td>
             <td>${tenant ? escapeHtml(tenant.name) : '已刪除租戶'}</td>
             <td>${tenant ? tenant.spotNumber : '-'}</td>
             <td>${formatCurrency(p.amount)}</td>
@@ -1223,17 +1351,215 @@
         .reduce((sum, p) => sum + Number(p.amount || 0), 0);
       const overallTotal = state.payments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
       const paymentCount = state.payments.length;
+
+      const analysis = getAnalysisRange();
+      const periodPayments = getPaymentsBetweenMonths(analysis.startMonth, analysis.endMonth);
+      const periodTotal = periodPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+      const cashTotal = periodPayments
+        .filter(p => (p.paymentMethod || '') === '現金')
+        .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+      const atmTotal = periodPayments
+        .filter(p => (p.paymentMethod || '') === 'ATM')
+        .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+      const averagePerRecord = periodPayments.length ? Math.round(periodTotal / periodPayments.length) : 0;
+      const activeTenantCount = new Set(periodPayments.map(p => p.tenantId).filter(Boolean)).size;
+
       document.getElementById('paymentStats').innerHTML = `
         <div class="card stat-card"><h3>本月已收</h3><div class="value" style="font-size:28px;">${formatCurrency(thisMonthTotal)}</div><div class="desc">${currentMonthStr} 的紀錄總額</div></div>
         <div class="card stat-card"><h3>累計收款</h3><div class="value" style="font-size:28px;">${formatCurrency(overallTotal)}</div><div class="desc">所有歷史收費合計</div></div>
         <div class="card stat-card"><h3>收費筆數</h3><div class="value">${paymentCount}</div><div class="desc">目前已建立的紀錄數</div></div>
+        <div class="card stat-card"><h3>分析區間收入</h3><div class="value" style="font-size:28px;">${formatCurrency(periodTotal)}</div><div class="desc">${analysis.startMonth} ～ ${analysis.endMonth}</div></div>
+        <div class="card stat-card"><h3>分析區間現金 / ATM</h3><div class="value" style="font-size:24px;">${formatCurrency(cashTotal)} / ${formatCurrency(atmTotal)}</div><div class="desc">快速看收款方式分布</div></div>
+        <div class="card stat-card"><h3>分析區間平均每筆</h3><div class="value" style="font-size:28px;">${formatCurrency(averagePerRecord)}</div><div class="desc">共 ${periodPayments.length} 筆，${activeTenantCount} 位租戶</div></div>
+      `;
+    }
+
+    function monthToLabel(monthValue) {
+      if (!monthValue || !/^\d{4}-\d{2}$/.test(monthValue)) return '未設定';
+      const [year, month] = monthValue.split('-');
+      return `${year} 年 ${Number(month)} 月`;
+    }
+
+    function compareMonthValue(a, b) {
+      return String(a || '').localeCompare(String(b || ''));
+    }
+
+    function getAnalysisRange() {
+      const startInput = document.getElementById('analysisStartMonth');
+      const endInput = document.getElementById('analysisEndMonth');
+      let startMonth = startInput?.value || currentMonthStr;
+      let endMonth = endInput?.value || currentMonthStr;
+      if (compareMonthValue(startMonth, endMonth) > 0) {
+        [startMonth, endMonth] = [endMonth, startMonth];
+      }
+      return { startMonth, endMonth };
+    }
+
+    function getPaymentsBetweenMonths(startMonth, endMonth) {
+      return [...state.payments]
+        .filter(p => {
+          const month = p.paymentMonth || '';
+          return month && compareMonthValue(month, startMonth) >= 0 && compareMonthValue(month, endMonth) <= 0;
+        })
+        .sort((a, b) => {
+          const keyA = `${a.paymentMonth || ''}-${a.paymentDate || ''}`;
+          const keyB = `${b.paymentMonth || ''}-${b.paymentDate || ''}`;
+          return keyA.localeCompare(keyB);
+        });
+    }
+
+    function getMonthlySummaryRows(startMonth, endMonth) {
+      const monthMap = new Map();
+      getPaymentsBetweenMonths(startMonth, endMonth).forEach(p => {
+        const monthKey = p.paymentMonth || '';
+        if (!monthMap.has(monthKey)) {
+          monthMap.set(monthKey, { month: monthKey, count: 0, total: 0 });
+        }
+        const item = monthMap.get(monthKey);
+        item.count += 1;
+        item.total += Number(p.amount || 0);
+      });
+      return Array.from(monthMap.values()).sort((a, b) => a.month.localeCompare(b.month));
+    }
+
+    function renderFinancialAnalysis() {
+      const analysis = getAnalysisRange();
+      const periodPayments = getPaymentsBetweenMonths(analysis.startMonth, analysis.endMonth);
+      renderMonthlyBreakdown(analysis, periodPayments);
+      renderTenantRanking(periodPayments);
+      renderPaymentMethodBreakdown(periodPayments);
+      renderFinanceInsights(analysis, periodPayments);
+    }
+
+    function renderMonthlyBreakdown(analysis, periodPayments) {
+      const container = document.getElementById('monthlyBreakdown');
+      if (!container) return;
+      const rows = getMonthlySummaryRows(analysis.startMonth, analysis.endMonth);
+      if (!rows.length) {
+        container.innerHTML = `<div class="empty-hint">這段期間還沒有收費紀錄，可以先切到其他月份看看。</div>`;
+        return;
+      }
+      const maxTotal = Math.max(...rows.map(row => row.total), 1);
+      container.innerHTML = `
+        <div class="report-bars">
+          ${rows.map(row => `
+            <div class="bar-row">
+              <div>${row.month}</div>
+              <div class="bar-track"><div class="bar-fill" style="width:${Math.max((row.total / maxTotal) * 100, 4)}%"></div></div>
+              <div>${formatCurrency(row.total)}</div>
+            </div>
+          `).join('')}
+        </div>
+        <div class="footer-note">共 ${rows.length} 個月份，期間合計 ${formatCurrency(periodPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0))}</div>
+      `;
+    }
+
+    function renderTenantRanking(periodPayments) {
+      const container = document.getElementById('tenantRanking');
+      if (!container) return;
+      const tenantMap = new Map();
+      periodPayments.forEach(p => {
+        const tenant = state.tenants.find(t => t.id === p.tenantId);
+        const key = p.tenantId || 'unknown';
+        if (!tenantMap.has(key)) {
+          tenantMap.set(key, {
+            tenantName: tenant?.name || '已刪除租戶',
+            spotNumber: tenant?.spotNumber || '-',
+            total: 0,
+            count: 0,
+          });
+        }
+        const item = tenantMap.get(key);
+        item.total += Number(p.amount || 0);
+        item.count += 1;
+      });
+      const ranking = Array.from(tenantMap.values()).sort((a, b) => b.total - a.total).slice(0, 5);
+      if (!ranking.length) {
+        container.innerHTML = `<div class="empty-hint">目前沒有可排行的租戶資料。</div>`;
+        return;
+      }
+      container.innerHTML = `<div class="ranking-list">
+        ${ranking.map((item, index) => `
+          <div class="ranking-item">
+            <div>
+              <div class="name">#${index + 1} ${escapeHtml(item.tenantName)}</div>
+              <div class="sub">車位 ${item.spotNumber} ・ ${item.count} 筆紀錄</div>
+            </div>
+            <div class="name">${formatCurrency(item.total)}</div>
+          </div>
+        `).join('')}
+      </div>`;
+    }
+
+    function renderPaymentMethodBreakdown(periodPayments) {
+      const container = document.getElementById('paymentMethodBreakdown');
+      if (!container) return;
+      const cashTotal = periodPayments.filter(p => (p.paymentMethod || '') === '現金').reduce((sum, p) => sum + Number(p.amount || 0), 0);
+      const atmTotal = periodPayments.filter(p => (p.paymentMethod || '') === 'ATM').reduce((sum, p) => sum + Number(p.amount || 0), 0);
+      const total = cashTotal + atmTotal;
+      if (!periodPayments.length || total === 0) {
+        container.innerHTML = `<div class="empty-hint">這段期間還沒有可分析的收款方式資料。</div>`;
+        return;
+      }
+      const cashPct = total ? (cashTotal / total) * 100 : 0;
+      const atmPct = total ? (atmTotal / total) * 100 : 0;
+      container.innerHTML = `
+        <div class="report-bars">
+          <div class="bar-row">
+            <div>現金</div>
+            <div class="bar-track"><div class="bar-fill cash" style="width:${Math.max(cashPct, 4)}%"></div></div>
+            <div>${formatCurrency(cashTotal)}</div>
+          </div>
+          <div class="bar-row">
+            <div>ATM</div>
+            <div class="bar-track"><div class="bar-fill atm" style="width:${Math.max(atmPct, 4)}%"></div></div>
+            <div>${formatCurrency(atmTotal)}</div>
+          </div>
+        </div>
+        <div class="footer-note">現金 ${cashPct.toFixed(1)}% ・ ATM ${atmPct.toFixed(1)}%</div>
+      `;
+    }
+
+    function renderFinanceInsights(analysis, periodPayments) {
+      const container = document.getElementById('financeInsights');
+      if (!container) return;
+      if (!periodPayments.length) {
+        container.innerHTML = `<div class="empty-hint">還沒有資料，所以這裡先安靜如深夜停車場。新增幾筆收費後，這區就會活起來。</div>`;
+        return;
+      }
+      const monthlyRows = getMonthlySummaryRows(analysis.startMonth, analysis.endMonth);
+      const totals = monthlyRows.map(row => row.total);
+      const maxRow = monthlyRows.reduce((best, row) => !best || row.total > best.total ? row : best, null);
+      const minRow = monthlyRows.reduce((best, row) => !best || row.total < best.total ? row : best, null);
+      const average = totals.length ? totals.reduce((sum, value) => sum + value, 0) / totals.length : 0;
+      const latestMonth = monthlyRows[monthlyRows.length - 1];
+      const previousMonth = monthlyRows[monthlyRows.length - 2];
+      let trendText = '目前只有 1 個月份資料，還看不出明顯趨勢。';
+      if (latestMonth && previousMonth) {
+        const diff = latestMonth.total - previousMonth.total;
+        if (diff > 0) trendText = `最近一個月比前一個月增加 ${formatCurrency(diff)}。`;
+        else if (diff < 0) trendText = `最近一個月比前一個月減少 ${formatCurrency(Math.abs(diff))}。`;
+        else trendText = '最近兩個月份收入持平。';
+      }
+      container.innerHTML = `
+        <div class="meta">
+          分析期間：${monthToLabel(analysis.startMonth)} ～ ${monthToLabel(analysis.endMonth)}<br>
+          平均月收入：${formatCurrency(Math.round(average))}<br>
+          最高月份：${maxRow ? `${monthToLabel(maxRow.month)}，${formatCurrency(maxRow.total)}` : '無'}<br>
+          最低月份：${minRow ? `${monthToLabel(minRow.month)}，${formatCurrency(minRow.total)}` : '無'}<br><br>
+          ${trendText}
+        </div>
       `;
     }
 
     function syncReportControls() {
       const monthInput = document.getElementById('reportMonth');
       const yearSelect = document.getElementById('reportYear');
+      const analysisStartMonthInput = document.getElementById('analysisStartMonth');
+      const analysisEndMonthInput = document.getElementById('analysisEndMonth');
       if (!monthInput.value) monthInput.value = currentMonthStr;
+      if (analysisStartMonthInput && !analysisStartMonthInput.value) analysisStartMonthInput.value = `${today.getFullYear()}-01`;
+      if (analysisEndMonthInput && !analysisEndMonthInput.value) analysisEndMonthInput.value = currentMonthStr;
 
       const yearSet = new Set([currentYearStr]);
       state.payments.forEach(p => {
@@ -1277,103 +1603,113 @@
       return `${y}/${m}/${day} ${hh}:${mm}`;
     }
 
-    function csvEscape(value) {
-      const str = String(value ?? '');
-      return `"${str.replaceAll('"', '""')}"`;
-    }
 
-    function downloadCsv(filename, rows) {
-      const csv = '\ufeff' + rows.map(row => row.map(csvEscape).join(',')).join('\r\n');
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(url);
-    }
 
-    function exportMonthlyReportCsv() {
+
+
+
+
+    function exportMonthlyExcel() {
       const monthValue = document.getElementById('reportMonth').value || currentMonthStr;
       const rows = getReportMonthRecords(monthValue);
-      const total = rows.reduce((sum, p) => sum + Number(p.amount || 0), 0);
       const [year, month] = monthValue.split('-');
-      const csvRows = [
-        [`${state.settings.lotName} 月報表`],
+      const workbook = XLSX.utils.book_new();
+
+      const sheetRows = [
+        [`${state.settings.lotName} ${year} 年 ${Number(month)} 月報表`],
         ['報表期間', `${year} 年 ${Number(month)} 月`],
         ['匯出時間', formatDateTime(new Date())],
         ['收費筆數', rows.length],
-        ['月收入合計', total],
+        ['月收入合計', rows.reduce((sum, p) => sum + Number(p.amount || 0), 0)],
         [],
-        ['收費月份', '租戶', '租戶類型', '車位', '車牌', '金額', '收款日', '收款方式', '備註'],
+        ['收款日', '租戶', '租戶類型', '車位', '車牌', '金額', '收款方式', '備註'],
       ];
 
       rows.forEach(p => {
         const tenant = state.tenants.find(t => t.id === p.tenantId);
-        csvRows.push([
-          p.paymentMonth || '',
+        sheetRows.push([
+          p.paymentDate || '',
           tenant?.name || '已刪除租戶',
           getTenantLabelType(tenant),
           tenant?.spotNumber || '',
           tenant?.plate || '',
           Number(p.amount || 0),
-          p.paymentDate || '',
           p.paymentMethod || '',
           p.note || '',
         ]);
       });
 
-      downloadCsv(`${state.settings.lotName}_${year}-${month}_月報表.csv`, csvRows);
-      showToast(`已匯出 ${year} 年 ${Number(month)} 月報表`);
+      const worksheet = XLSX.utils.aoa_to_sheet(sheetRows);
+      XLSX.utils.book_append_sheet(workbook, worksheet, `${Number(month)}月`);
+      XLSX.writeFile(workbook, `${state.settings.lotName}_${year}-${month}_月報表.xlsx`);
+      showToast(`已匯出 ${year} 年 ${Number(month)} 月報表 Excel`);
     }
 
-    function exportYearlyReportCsv() {
+    function exportYearlyExcel() {
       const yearValue = document.getElementById('reportYear').value || currentYearStr;
       const rows = getReportYearRecords(yearValue);
-      const total = rows.reduce((sum, p) => sum + Number(p.amount || 0), 0);
-      const monthlySummary = Array.from({ length: 12 }, (_, index) => {
-        const month = String(index + 1).padStart(2, '0');
-        const monthKey = `${yearValue}-${month}`;
-        const monthRows = rows.filter(p => p.paymentMonth === monthKey);
-        return {
-          month: `${Number(month)} 月`,
-          count: monthRows.length,
-          total: monthRows.reduce((sum, p) => sum + Number(p.amount || 0), 0),
-        };
-      });
+      const workbook = XLSX.utils.book_new();
 
-      const csvRows = [
+      const summaryRows = [
         [`${state.settings.lotName} 年報表`],
         ['報表年度', `${yearValue} 年`],
         ['匯出時間', formatDateTime(new Date())],
         ['收費筆數', rows.length],
-        ['年度收入合計', total],
+        ['年度收入合計', rows.reduce((sum, p) => sum + Number(p.amount || 0), 0)],
         [],
         ['每月彙總'],
         ['月份', '收費筆數', '月收入'],
-        ...monthlySummary.map(item => [item.month, item.count, item.total]),
-        [],
-        ['收費明細'],
-        ['收費月份', '租戶', '租戶類型', '車位', '車牌', '金額', '收款日', '收款方式', '備註'],
       ];
 
-      rows.forEach(p => {
-        const tenant = state.tenants.find(t => t.id === p.tenantId);
-        csvRows.push([
-          p.paymentMonth || '',
-          tenant?.name || '已刪除租戶',
-          getTenantLabelType(tenant),
-          tenant?.spotNumber || '',
-          tenant?.plate || '',
-          Number(p.amount || 0),
-          p.paymentDate || '',
-          p.paymentMethod || '',
-          p.note || '',
+      for (let index = 0; index < 12; index += 1) {
+        const month = String(index + 1).padStart(2, '0');
+        const monthKey = `${yearValue}-${month}`;
+        const monthRows = rows.filter(p => p.paymentMonth === monthKey);
+        summaryRows.push([
+          `${Number(month)} 月`,
+          monthRows.length,
+          monthRows.reduce((sum, p) => sum + Number(p.amount || 0), 0),
         ]);
-      });
+      }
 
-      downloadCsv(`${state.settings.lotName}_${yearValue}_年報表.csv`, csvRows);
-      showToast(`已匯出 ${yearValue} 年報表`);
+      const summarySheet = XLSX.utils.aoa_to_sheet(summaryRows);
+      XLSX.utils.book_append_sheet(workbook, summarySheet, '總表');
+
+      for (let index = 0; index < 12; index += 1) {
+        const month = String(index + 1).padStart(2, '0');
+        const monthKey = `${yearValue}-${month}`;
+        const monthRows = rows.filter(p => p.paymentMonth === monthKey);
+
+        const sheetRows = [
+          [`${state.settings.lotName} ${yearValue} 年 ${Number(month)} 月報表`],
+          ['報表期間', `${yearValue} 年 ${Number(month)} 月`],
+          ['匯出時間', formatDateTime(new Date())],
+          ['收費筆數', monthRows.length],
+          ['月收入合計', monthRows.reduce((sum, p) => sum + Number(p.amount || 0), 0)],
+          [],
+          ['收款日', '租戶', '租戶類型', '車位', '車牌', '金額', '收款方式', '備註'],
+        ];
+
+        monthRows.forEach(p => {
+          const tenant = state.tenants.find(t => t.id === p.tenantId);
+          sheetRows.push([
+            p.paymentDate || '',
+            tenant?.name || '已刪除租戶',
+            getTenantLabelType(tenant),
+            tenant?.spotNumber || '',
+            tenant?.plate || '',
+            Number(p.amount || 0),
+            p.paymentMethod || '',
+            p.note || '',
+          ]);
+        });
+
+        const worksheet = XLSX.utils.aoa_to_sheet(sheetRows);
+        XLSX.utils.book_append_sheet(workbook, worksheet, `${Number(month)}月`);
+      }
+
+      XLSX.writeFile(workbook, `${state.settings.lotName}_${yearValue}_年報表.xlsx`);
+      showToast(`已匯出 ${yearValue} 年報表 Excel`);
     }
 
     function renderReportSummary() {
@@ -1394,7 +1730,7 @@
             </div>
           </div>
           <div class="meta">
-            月報表期間：${monthValue.replace('-', ' 年 ')} 月<br>
+            月報表期間：${monthToLabel(monthValue)}<br>
             月報表筆數：${monthRows.length} 筆<br>
             月報表合計：${formatCurrency(monthTotal)}<br><br>
             年報表期間：${yearValue} 年<br>
@@ -1451,6 +1787,13 @@
       }[type] || type;
     }
 
+    function getDefaultRentByTenantType(type) {
+      if (type === 'half_year') return 15000;
+      if (type === 'one_year') return 30000;
+      if (type === 'family') return 0;
+      return 0;
+    }
+
     function openTenantModal(id = null, presetSpot = null) {
       const modal = document.getElementById('tenantModal');
       const title = document.getElementById('tenantModalTitle');
@@ -1458,8 +1801,8 @@
       form.reset();
       document.getElementById('tenantId').value = '';
       document.getElementById('contractEnd').value = '';
-      document.getElementById('tenantType').value = 'rented';
-      document.getElementById('monthlyRent').value = 0;
+      document.getElementById('tenantType').value = 'family';
+      document.getElementById('monthlyRent').value = getDefaultRentByTenantType('family');
       document.getElementById('contractStart').value = todayStr;
       document.getElementById('note').value = '';
 
@@ -1474,7 +1817,8 @@
         document.getElementById('monthlyRent').value = tenant.monthlyRent;
         document.getElementById('contractStart').value = tenant.contractStart || todayStr;
         document.getElementById('contractEnd').value = tenant.contractEnd || '';
-        document.getElementById('tenantType').value = tenant.tenantType || 'rented';
+        const tenantType = ['family', 'half_year', 'one_year'].includes(tenant.tenantType) ? tenant.tenantType : 'half_year';
+        document.getElementById('tenantType').value = tenantType;
         document.getElementById('note').value = tenant.note || '';
         fillSpotOptions(tenant.spotNumber);
       } else {
@@ -1493,7 +1837,7 @@
       const title = document.getElementById('paymentModalTitle');
       document.getElementById('paymentForm').reset();
       document.getElementById('paymentId').value = '';
-      document.getElementById('paymentMonth').value = currentMonthStr;
+      // document.getElementById('paymentMonth').value = currentMonthStr;
       document.getElementById('paymentDate').value = todayStr;
       document.getElementById('paymentMethod').value = '現金';
       document.getElementById('paymentNote').value = '';
@@ -1505,7 +1849,6 @@
         title.textContent = '編輯收費紀錄';
         document.getElementById('paymentId').value = p.id;
         fillPaymentTenantOptions(p.tenantId);
-        document.getElementById('paymentMonth').value = p.paymentMonth;
         document.getElementById('paymentAmount').value = p.amount;
         document.getElementById('paymentDate').value = p.paymentDate;
         document.getElementById('paymentMethod').value = p.paymentMethod || '現金';
@@ -1767,12 +2110,13 @@
     document.getElementById('paymentForm').addEventListener('submit', e => {
       e.preventDefault();
       const id = document.getElementById('paymentId').value;
+      const paymentDate = document.getElementById('paymentDate').value;
       const record = {
         id: id || crypto.randomUUID(),
         tenantId: document.getElementById('paymentTenant').value,
-        paymentMonth: document.getElementById('paymentMonth').value,
+        paymentMonth: paymentDate ? paymentDate.slice(0, 7) : '',
         amount: Number(document.getElementById('paymentAmount').value || 0),
-        paymentDate: document.getElementById('paymentDate').value,
+        paymentDate: paymentDate,
         paymentMethod: document.getElementById('paymentMethod').value,
         note: document.getElementById('paymentNote').value.trim(),
       };
@@ -1780,14 +2124,38 @@
         alert('請先選擇租戶。');
         return;
       }
+
+      const tenant = state.tenants.find(t => t.id === record.tenantId);
+      let renewedContractStart = '';
+      let renewedContractEnd = '';
+
       if (id) {
         state.payments = state.payments.map(p => p.id === id ? record : p);
       } else {
         state.payments.push(record);
+
+        if (tenant && tenant.tenantType !== 'family') {
+          const contractMonths = getContractMonthsByAmount(record.amount);
+
+          if (contractMonths > 0) {
+            renewedContractStart = tenant.contractEnd || tenant.contractStart || record.paymentDate;
+            renewedContractEnd = addMonthsToDate(renewedContractStart, contractMonths);
+
+            if (renewedContractEnd) {
+              tenant.contractStart = renewedContractStart;
+              tenant.contractEnd = renewedContractEnd;
+            }
+          }
+        }
       }
+
       closePaymentModal();
       renderAll();
       scheduleSave();
+
+      if (renewedContractEnd) {
+        showToast(`已收費，合約期間已更新為 ${formatDate(renewedContractStart)} ～ ${formatDate(renewedContractEnd)}`);
+      }
     });
 
     document.getElementById('tenantSearch').addEventListener('input', renderTenantList);
@@ -1809,10 +2177,18 @@
     });
 
     document.getElementById('exportBtn').addEventListener('click', exportBackup);
-    document.getElementById('exportMonthCsvBtn').addEventListener('click', exportMonthlyReportCsv);
-    document.getElementById('exportYearCsvBtn').addEventListener('click', exportYearlyReportCsv);
+    document.getElementById('exportMonthExcelBtn').addEventListener('click', exportMonthlyExcel);
+    document.getElementById('exportYearExcelBtn').addEventListener('click', exportYearlyExcel);
     document.getElementById('reportMonth').addEventListener('change', renderReportSummary);
     document.getElementById('reportYear').addEventListener('change', renderReportSummary);
+    document.getElementById('analysisStartMonth').addEventListener('change', () => {
+      renderPaymentStats();
+      renderFinancialAnalysis();
+    });
+    document.getElementById('analysisEndMonth').addEventListener('change', () => {
+      renderPaymentStats();
+      renderFinancialAnalysis();
+    });
     document.getElementById('importFile').addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
@@ -1848,9 +2224,7 @@
     document.getElementById('closePaymentModal').addEventListener('click', closePaymentModal);
     document.getElementById('cancelPaymentBtn').addEventListener('click', closePaymentModal);
     document.getElementById('tenantType').addEventListener('change', (e) => {
-      if (e.target.value === 'family' && !document.getElementById('monthlyRent').value) {
-        document.getElementById('monthlyRent').value = Number(state.settings.familyRentDefault || 0);
-      }
+      document.getElementById('monthlyRent').value = getDefaultRentByTenantType(e.target.value);
     });
 
     document.getElementById('loginBtn').addEventListener('click', login);
