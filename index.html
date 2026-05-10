@@ -2135,22 +2135,21 @@
         state.payments.push(record);
 
         if (tenant && tenant.tenantType !== 'family') {
-          const hasPreviousPayments = state.payments.some(p =>
-            p.tenantId === tenant.id &&
-            p.id !== record.id
+          const contractMonths = getContractMonthsByAmount(record.amount);
+          const remainingDays = daysUntil(tenant.contractEnd);
+          const shouldRenewContract = Boolean(
+            tenant.contractEnd &&
+            remainingDays !== null &&
+            remainingDays <= 7
           );
 
-          if (hasPreviousPayments) {
-            const contractMonths = getContractMonthsByAmount(record.amount);
+          if (contractMonths > 0 && shouldRenewContract) {
+            renewedContractStart = tenant.contractEnd || tenant.contractStart || record.paymentDate;
+            renewedContractEnd = addMonthsToDate(renewedContractStart, contractMonths);
 
-            if (contractMonths > 0) {
-              renewedContractStart = tenant.contractEnd || tenant.contractStart || record.paymentDate;
-              renewedContractEnd = addMonthsToDate(renewedContractStart, contractMonths);
-
-              if (renewedContractEnd) {
-                tenant.contractStart = renewedContractStart;
-                tenant.contractEnd = renewedContractEnd;
-              }
+            if (renewedContractEnd) {
+              tenant.contractStart = renewedContractStart;
+              tenant.contractEnd = renewedContractEnd;
             }
           }
         }
