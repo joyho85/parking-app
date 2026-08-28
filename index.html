@@ -166,6 +166,23 @@
       padding: 18px;
     }
 
+    .card-header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+
+    .card-header-row h2 {
+      margin: 0;
+    }
+
+    .card-header-row .actions {
+      margin-left: auto;
+    }
+
     .stat-card h3 {
       margin: 0 0 8px;
       font-size: 15px;
@@ -776,7 +793,6 @@
           <button class="tab-btn" data-tab="settings">設定 / 備份</button>
         </div>
         <div class="actions">
-          <button class="btn-light" id="addTenantTopBtn">＋ 新增租戶</button>
           <button class="btn-secondary" id="addPaymentTopBtn">＋ 新增收費</button>
         </div>
       </div>
@@ -804,7 +820,13 @@
 
       <section class="section" id="tenantsSection">
         <div class="card">
-          <h2>租戶管理</h2>
+          <div class="card-header-row">
+            <h2>租戶管理</h2>
+            <div class="actions">
+              <button class="btn-light" id="exportTenantsExcelBtn">📥 匯出用戶資料</button>
+              <button class="btn-primary" id="addTenantTopBtn">＋ 新增租戶</button>
+            </div>
+          </div>
           <div class="filter-row">
             <label>搜尋
               <input type="text" id="tenantSearch" placeholder="姓名 / 車牌 / 電話 / 車位" />
@@ -1609,6 +1631,61 @@
 
 
 
+    function exportTenantsExcel() {
+      if (!Array.isArray(state.tenants) || !state.tenants.length) {
+        showToast('目前沒有可匯出的租戶資料');
+        return;
+      }
+
+      const rows = [...state.tenants]
+        .sort((a, b) => Number(a.spotNumber || 0) - Number(b.spotNumber || 0))
+        .map(t => {
+          const status = getTenantStatus(t);
+          const remainingDays = t.contractEnd ? daysUntil(t.contractEnd) : null;
+          return {
+            '車位': t.spotNumber ?? '',
+            '姓名': t.name || '',
+            '電話': t.phone || '',
+            '車牌': t.plate || '',
+            '租戶類型': tenantTypeText(t.tenantType),
+            '應收租金（元）': Number(t.monthlyRent || 0),
+            '合約開始日': t.contractStart || '',
+            '合約到期日': t.contractEnd || '',
+            '狀態': statusText(status),
+            '距到期日（天）': remainingDays ?? '',
+            '備註': t.note || '',
+          };
+        });
+
+      const workbook = XLSX.utils.book_new();
+      const worksheet = XLSX.utils.json_to_sheet(rows);
+      worksheet['!cols'] = [
+        { wch: 8 },
+        { wch: 14 },
+        { wch: 16 },
+        { wch: 14 },
+        { wch: 12 },
+        { wch: 16 },
+        { wch: 14 },
+        { wch: 14 },
+        { wch: 12 },
+        { wch: 16 },
+        { wch: 30 },
+      ];
+      worksheet['!autofilter'] = { ref: worksheet['!ref'] };
+      XLSX.utils.book_append_sheet(workbook, worksheet, '租戶資料');
+
+      const date = new Date();
+      const fileDate = [
+        date.getFullYear(),
+        String(date.getMonth() + 1).padStart(2, '0'),
+        String(date.getDate()).padStart(2, '0'),
+      ].join('-');
+      const safeLotName = (state.settings.lotName || '停車場').replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, '_');
+      XLSX.writeFile(workbook, `${safeLotName}_用戶資料_${fileDate}.xlsx`);
+      showToast(`已匯出 ${rows.length} 筆用戶資料 Excel`);
+    }
+
     function exportMonthlyExcel() {
       const monthValue = document.getElementById('reportMonth').value || currentMonthStr;
       const rows = getReportMonthRecords(monthValue);
@@ -2135,21 +2212,22 @@
         state.payments.push(record);
 
         if (tenant && tenant.tenantType !== 'family') {
-          const contractMonths = getContractMonthsByAmount(record.amount);
-          const remainingDays = daysUntil(tenant.contractEnd);
-          const shouldRenewContract = Boolean(
-            tenant.contractEnd &&
-            remainingDays !== null &&
-            remainingDays <= 7
+          const hasPreviousPayments = state.payments.some(p =>
+            p.tenantId === tenant.id &&
+            p.id !== record.id
           );
 
-          if (contractMonths > 0 && shouldRenewContract) {
-            renewedContractStart = tenant.contractEnd || tenant.contractStart || record.paymentDate;
-            renewedContractEnd = addMonthsToDate(renewedContractStart, contractMonths);
+          if (hasPreviousPayments) {
+            const contractMonths = getContractMonthsByAmount(record.amount);
 
-            if (renewedContractEnd) {
-              tenant.contractStart = renewedContractStart;
-              tenant.contractEnd = renewedContractEnd;
+            if (contractMonths > 0) {
+              renewedContractStart = tenant.contractEnd || tenant.contractStart || record.paymentDate;
+              renewedContractEnd = addMonthsToDate(renewedContractStart, contractMonths);
+
+              if (renewedContractEnd) {
+                tenant.contractStart = renewedContractStart;
+                tenant.contractEnd = renewedContractEnd;
+              }
             }
           }
         }
@@ -2183,6 +2261,7 @@
     });
 
     document.getElementById('exportBtn').addEventListener('click', exportBackup);
+    document.getElementById('exportTenantsExcelBtn').addEventListener('click', exportTenantsExcel);
     document.getElementById('exportMonthExcelBtn').addEventListener('click', exportMonthlyExcel);
     document.getElementById('exportYearExcelBtn').addEventListener('click', exportYearlyExcel);
     document.getElementById('reportMonth').addEventListener('change', renderReportSummary);
