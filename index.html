@@ -2227,6 +2227,7 @@
               if (renewedContractEnd) {
                 tenant.contractStart = renewedContractStart;
                 tenant.contractEnd = renewedContractEnd;
+                delete tenant.expiryReminderSentAt; // 新合約開始，重新計算到期提醒
               }
             }
           }
