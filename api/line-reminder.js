@@ -24,6 +24,19 @@ function daysUntil(dateStr) {
   return Math.ceil((target - today) / (1000 * 60 * 60 * 24));
 }
 
+// 提醒記號只對「本期合約」有效：必須是在到期前 ALERT_DAYS 天的提醒窗口內發出的。
+// 上一期合約留下的舊記號一律忽略，否則續約後的租戶永遠不會再被提醒。
+function hasReminderForCurrentContract(tenant) {
+  if (!tenant.expiryReminderSentAt || !tenant.contractEnd) return false;
+
+  const sentAt = new Date(tenant.expiryReminderSentAt);
+  const windowStart = new Date(`${tenant.contractEnd}T00:00:00`);
+  if (Number.isNaN(sentAt.getTime()) || Number.isNaN(windowStart.getTime())) return false;
+
+  windowStart.setDate(windowStart.getDate() - ALERT_DAYS);
+  return sentAt >= windowStart;
+}
+
 function formatDate(dateStr) {
   if (!dateStr) return '未設定';
   const d = new Date(`${dateStr}T00:00:00`);
@@ -116,7 +129,7 @@ module.exports = async function handler(req, res) {
         remainingDays !== null &&
         remainingDays >= 0 &&
         remainingDays <= ALERT_DAYS &&
-        !t.expiryReminderSentAt;
+        !hasReminderForCurrentContract(t);
 
       if (!shouldNotify) continue;
 
